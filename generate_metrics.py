@@ -462,7 +462,8 @@ def calculate_period_dates(period_type: str, start_date: Optional[str] = None,
             sys.exit(1)
         
         start = datetime.strptime(start_date, '%Y-%m-%d').replace(tzinfo=timezone.utc)
-        end = datetime.strptime(end_date, '%Y-%m-%d').replace(tzinfo=timezone.utc)
+        # Adicionar um dia à data final para incluir todo o dia
+        end = datetime.strptime(end_date, '%Y-%m-%d').replace(tzinfo=timezone.utc) + timedelta(days=1)
         
         if start >= end:
             print(f"Erro: Data inicial (--start {start_date}) deve ser anterior à data final (--end {end_date})")
@@ -492,7 +493,12 @@ def format_period_display(period_type: str, start_date: Optional[datetime],
         return "Todo o histórico disponível"
     elif start_date and end_date:
         start_str = start_date.strftime('%Y-%m-%d')
-        end_str = end_date.strftime('%Y-%m-%d')
+        # Para período custom, subtrair um dia da exibição para mostrar a data real
+        if period_type == "custom":
+            display_end = end_date - timedelta(days=1)
+            end_str = display_end.strftime('%Y-%m-%d')
+        else:
+            end_str = end_date.strftime('%Y-%m-%d')
         
         period_names = {
             "last_month": "Último mês",
