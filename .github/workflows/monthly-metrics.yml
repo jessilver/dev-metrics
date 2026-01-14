@@ -1,0 +1,106 @@
+name: Monthly Dev Metrics
+
+on:
+  schedule:
+    # Executa no dia 1 de cada mês às 09:00 UTC
+    - cron: '0 9 1 * *'
+  workflow_dispatch:
+    # Permite execução manual
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  generate-metrics:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: Generate metrics report
+        id: metrics
+        env:
+          METRICS_TOKEN: ${{ secrets.METRICS_TOKEN }}
+        run: |
+          echo "Gerando métricas de desenvolvimento..."
+          
+          # Executar script e capturar saída
+          python generate_metrics.py > metrics_output.txt 2>&1
+          
+          # Armazenar saída para uso posterior
+          echo "metrics_generated=true" >> $GITHUB_OUTPUT
+      
+      - name: Get current month/year
+        id: date
+        run: |
+          # Obter mês e ano anterior
+          MONTH=$(date -d "last month" +%B)
+          YEAR=$(date -d "last month" +%Y)
+          MONTH_PT=$(case $MONTH in
+            January) echo "Janeiro";;
+            February) echo "Fevereiro";;
+            March) echo "Março";;
+            April) echo "Abril";;
+            May) echo "Maio";;
+            June) echo "Junho";;
+            July) echo "Julho";;
+            August) echo "Agosto";;
+            September) echo "Setembro";;
+            October) echo "Outubro";;
+            November) echo "Novembro";;
+            December) echo "Dezembro";;
+          esac)
+          echo "month=$MONTH_PT" >> $GITHUB_OUTPUT
+          echo "year=$YEAR" >> $GITHUB_OUTPUT
+      
+      - name: Create issue with metrics
+        if: steps.metrics.outputs.metrics_generated == 'true'
+        uses: actions/github-script@v7
+        env:
+          METRICS_OUTPUT: ${{ steps.metrics.outputs.report }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const metricsOutput = fs.readFileSync('metrics_output.txt', 'utf8');
+            
+            const month = '${{ steps.date.outputs.month }}';
+            const year = '${{ steps.date.outputs.year }}';
+            
+            const issueBody = `# 📊 Métricas de Desenvolvimento - ${month}/${year}
+            
+            Relatório automático gerado em: ${new Date().toLocaleString('pt-BR', { timeZone: 'UTC' })}
+            
+            ## Período Analisado
+            Todo o histórico disponível dos repositórios configurados.
+            
+            ## Resultados
+            
+            \`\`\`
+            ${metricsOutput}
+            \`\`\`
+            
+            ---
+            
+            > 🤖 Este relatório foi gerado automaticamente pelo workflow \`monthly-metrics.yml\`
+            `;
+            
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `📊 Métricas de Desenvolvimento - ${month}/${year}`,
+              body: issueBody,
+              labels: ['metrics', 'automated']
+            });
