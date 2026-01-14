@@ -449,23 +449,29 @@ def calculate_period_dates(period_type: str, start_date: Optional[str] = None,
         return start, now
     elif period_type == "custom":
         if not start_date or not end_date:
-            print("Erro: Período 'custom' requer start_date e end_date")
+            print("Erro: Período 'custom' requer os parâmetros --start e --end")
+            print("Exemplo: python generate_metrics.py --period custom --start 2025-01-01 --end 2025-12-31")
             sys.exit(1)
         
-        if not validate_date_format(start_date) or not validate_date_format(end_date):
-            print("Erro: Datas devem estar no formato YYYY-MM-DD")
+        if not validate_date_format(start_date):
+            print(f"Erro: Data inicial '{start_date}' deve estar no formato YYYY-MM-DD")
+            sys.exit(1)
+        
+        if not validate_date_format(end_date):
+            print(f"Erro: Data final '{end_date}' deve estar no formato YYYY-MM-DD")
             sys.exit(1)
         
         start = datetime.strptime(start_date, '%Y-%m-%d').replace(tzinfo=timezone.utc)
         end = datetime.strptime(end_date, '%Y-%m-%d').replace(tzinfo=timezone.utc)
         
         if start >= end:
-            print("Erro: start_date deve ser anterior a end_date")
+            print(f"Erro: Data inicial (--start {start_date}) deve ser anterior à data final (--end {end_date})")
             sys.exit(1)
         
         return start, end
     else:
         print(f"Erro: Tipo de período inválido: {period_type}")
+        print("Tipos válidos: all, last_month, last_3_months, last_6_months, custom")
         sys.exit(1)
 
 
