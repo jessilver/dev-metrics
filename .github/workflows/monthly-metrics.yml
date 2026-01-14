@@ -37,10 +37,13 @@ jobs:
           echo "Gerando métricas de desenvolvimento..."
           
           # Executar script e capturar saída
-          python generate_metrics.py > metrics_output.txt 2>&1
-          
-          # Armazenar saída para uso posterior
-          echo "metrics_generated=true" >> $GITHUB_OUTPUT
+          if python generate_metrics.py > metrics_output.txt 2>&1; then
+            echo "metrics_generated=true" >> $GITHUB_OUTPUT
+          else
+            echo "metrics_generated=false" >> $GITHUB_OUTPUT
+            cat metrics_output.txt
+            exit 1
+          fi
       
       - name: Get current month/year
         id: date
