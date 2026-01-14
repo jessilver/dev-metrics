@@ -49,10 +49,10 @@ class MetricsCalculator:
             
             for pr in pulls:
                 if pr.merged and pr.user.login == self.author:
-                    # Filtrar por período se especificado
-                    if start_date and pr.created_at < start_date:
+                    # Filtrar por período se especificado (baseado na data de merge)
+                    if start_date and pr.merged_at and pr.merged_at < start_date:
                         continue
-                    if end_date and pr.created_at > end_date:
+                    if end_date and pr.merged_at and pr.merged_at > end_date:
                         continue
                     merged_prs.append(pr)
             
@@ -614,7 +614,8 @@ def main():
     # Validar formato dos repositórios
     for repo in repositories:
         if not validate_repo_format(repo):
-            print(f"Erro: Repositório '{repo}' não está no formato correto (owner/repo)")
+            print(f"Erro: Repositório '{repo}' não está no formato correto.")
+            print("Use o formato 'owner/repo' (exemplo: 'microsoft/vscode')")
             sys.exit(1)
     
     # Autor
