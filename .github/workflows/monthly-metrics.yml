@@ -68,8 +68,6 @@ jobs:
       - name: Create issue with metrics
         if: steps.metrics.outputs.metrics_generated == 'true'
         uses: actions/github-script@v7
-        env:
-          METRICS_OUTPUT: ${{ steps.metrics.outputs.report }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |

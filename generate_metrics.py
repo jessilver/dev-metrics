@@ -213,7 +213,7 @@ class MetricsCalculator:
                     if tag_date > pr.merged_at:
                         if deploy_date is None or tag_date < deploy_date:
                             deploy_date = tag_date
-            except:
+            except (GithubException, AttributeError):
                 continue
         
         if deploy_date:
