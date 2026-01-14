@@ -5,7 +5,34 @@ on:
     # Executa no dia 1 de cada mês às 09:00 UTC
     - cron: '0 9 1 * *'
   workflow_dispatch:
-    # Permite execução manual
+    # Permite execução manual com inputs
+    inputs:
+      period:
+        description: 'Período de análise'
+        required: false
+        default: 'last_month'
+        type: choice
+        options:
+          - all
+          - last_month
+          - last_3_months
+          - last_6_months
+          - custom
+      
+      start_date:
+        description: 'Data inicial (YYYY-MM-DD) - apenas para período custom'
+        required: false
+        type: string
+      
+      end_date:
+        description: 'Data final (YYYY-MM-DD) - apenas para período custom'
+        required: false
+        type: string
+      
+      repositories:
+        description: 'Repositórios (separados por espaço, deixe vazio para usar config.yaml)'
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -36,8 +63,30 @@ jobs:
         run: |
           echo "Gerando métricas de desenvolvimento..."
           
+          # Construir comando com argumentos baseado nos inputs
+          CMD="python generate_metrics.py"
+          
+          # Adicionar período se especificado
+          if [ -n "${{ github.event.inputs.period }}" ]; then
+            CMD="$CMD --period ${{ github.event.inputs.period }}"
+          fi
+          
+          # Adicionar datas se especificadas (para período custom)
+          if [ -n "${{ github.event.inputs.start_date }}" ]; then
+            CMD="$CMD --start ${{ github.event.inputs.start_date }}"
+          fi
+          
+          if [ -n "${{ github.event.inputs.end_date }}" ]; then
+            CMD="$CMD --end ${{ github.event.inputs.end_date }}"
+          fi
+          
+          # Adicionar repositórios se especificados
+          if [ -n "${{ github.event.inputs.repositories }}" ]; then
+            CMD="$CMD --repos ${{ github.event.inputs.repositories }}"
+          fi
+          
           # Executar script e capturar saída
-          if python generate_metrics.py > metrics_output.txt 2>&1; then
+          if $CMD > metrics_output.txt 2>&1; then
             echo "metrics_generated=true" >> $GITHUB_OUTPUT
           else
             echo "metrics_generated=false" >> $GITHUB_OUTPUT
@@ -80,12 +129,33 @@ jobs:
             const month = '${{ steps.date.outputs.month }}';
             const year = '${{ steps.date.outputs.year }}';
             
+            // Obter informações de configuração dos inputs
+            const period = '${{ github.event.inputs.period }}' || 'last_month';
+            const startDate = '${{ github.event.inputs.start_date }}' || '';
+            const endDate = '${{ github.event.inputs.end_date }}' || '';
+            const repos = '${{ github.event.inputs.repositories }}' || 'Configurado em config.yaml';
+            
+            let periodInfo = '';
+            if (period === 'custom' && startDate && endDate) {
+              periodInfo = `Período personalizado: ${startDate} a ${endDate}`;
+            } else if (period === 'all') {
+              periodInfo = 'Todo o histórico disponível';
+            } else if (period === 'last_month') {
+              periodInfo = 'Último mês';
+            } else if (period === 'last_3_months') {
+              periodInfo = 'Últimos 3 meses';
+            } else if (period === 'last_6_months') {
+              periodInfo = 'Últimos 6 meses';
+            }
+            
             const issueBody = `# 📊 Métricas de Desenvolvimento - ${month}/${year}
             
             Relatório automático gerado em: ${new Date().toLocaleString('pt-BR', { timeZone: 'UTC' })}
             
-            ## Período Analisado
-            Todo o histórico disponível dos repositórios configurados.
+            ## Configuração de Análise
+            
+            **Repositórios:** ${repos}
+            **Período:** ${periodInfo}
             
             ## Resultados
             

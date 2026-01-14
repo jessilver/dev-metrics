@@ -6,7 +6,9 @@ Analisa PRs de repositórios específicos e calcula métricas de produtividade e
 
 import os
 import sys
-from datetime import datetime, timezone
+import argparse
+import yaml
+from datetime import datetime, timezone, timedelta
 from typing import List, Dict, Optional, Tuple
 from dateutil import parser
 from github import Github, GithubException
@@ -28,12 +30,15 @@ class MetricsCalculator:
         self.github = Github(token)
         self.author = author
     
-    def get_merged_prs(self, repo: Repository) -> List[PullRequest]:
+    def get_merged_prs(self, repo: Repository, start_date: Optional[datetime] = None,
+                      end_date: Optional[datetime] = None) -> List[PullRequest]:
         """
         Obtém PRs merged do autor especificado.
         
         Args:
             repo: Repositório do GitHub
+            start_date: Data inicial para filtrar PRs (opcional)
+            end_date: Data final para filtrar PRs (opcional)
             
         Returns:
             Lista de pull requests merged
@@ -44,6 +49,11 @@ class MetricsCalculator:
             
             for pr in pulls:
                 if pr.merged and pr.user.login == self.author:
+                    # Filtrar por período se especificado
+                    if start_date and pr.created_at < start_date:
+                        continue
+                    if end_date and pr.created_at > end_date:
+                        continue
                     merged_prs.append(pr)
             
             return merged_prs
@@ -254,12 +264,15 @@ class MetricsCalculator:
         failed_count = sum(1 for pr in prs if self.is_failed_deployment(pr))
         return (failed_count / len(prs)) * 100
     
-    def analyze_repository(self, repo_name: str) -> Dict:
+    def analyze_repository(self, repo_name: str, start_date: Optional[datetime] = None,
+                          end_date: Optional[datetime] = None) -> Dict:
         """
         Analisa um repositório e calcula todas as métricas.
         
         Args:
             repo_name: Nome do repositório (owner/repo)
+            start_date: Data inicial para filtrar PRs (opcional)
+            end_date: Data final para filtrar PRs (opcional)
             
         Returns:
             Dicionário com as métricas calculadas
@@ -273,7 +286,7 @@ class MetricsCalculator:
             return {}
         
         # Obter PRs merged do autor
-        prs = self.get_merged_prs(repo)
+        prs = self.get_merged_prs(repo, start_date, end_date)
         print(f"PRs contabilizados: {len(prs)}")
         
         if not prs:
@@ -356,8 +369,226 @@ class MetricsCalculator:
         print("----------------------------------------\n")
 
 
+def load_config(config_path: str) -> Dict:
+    """
+    Carrega configuração do arquivo YAML.
+    
+    Args:
+        config_path: Caminho para o arquivo de configuração
+        
+    Returns:
+        Dicionário com a configuração carregada
+    """
+    try:
+        with open(config_path, 'r', encoding='utf-8') as f:
+            config = yaml.safe_load(f)
+            return config if config else {}
+    except FileNotFoundError:
+        return {}
+    except yaml.YAMLError as e:
+        print(f"Erro ao ler arquivo de configuração: {e}")
+        return {}
+
+
+def validate_repo_format(repo: str) -> bool:
+    """
+    Valida se o repositório está no formato correto (owner/repo).
+    
+    Args:
+        repo: Nome do repositório
+        
+    Returns:
+        True se o formato estiver correto
+    """
+    parts = repo.split('/')
+    return len(parts) == 2 and all(part.strip() for part in parts)
+
+
+def validate_date_format(date_str: str) -> bool:
+    """
+    Valida se a data está no formato YYYY-MM-DD.
+    
+    Args:
+        date_str: String com a data
+        
+    Returns:
+        True se o formato estiver correto
+    """
+    try:
+        datetime.strptime(date_str, '%Y-%m-%d')
+        return True
+    except ValueError:
+        return False
+
+
+def calculate_period_dates(period_type: str, start_date: Optional[str] = None, 
+                          end_date: Optional[str] = None) -> Tuple[Optional[datetime], Optional[datetime]]:
+    """
+    Calcula as datas de início e fim baseado no tipo de período.
+    
+    Args:
+        period_type: Tipo de período (all, last_month, last_3_months, last_6_months, custom)
+        start_date: Data inicial para período custom (formato YYYY-MM-DD)
+        end_date: Data final para período custom (formato YYYY-MM-DD)
+        
+    Returns:
+        Tupla com data de início e fim (datetime ou None)
+    """
+    now = datetime.now(timezone.utc)
+    
+    if period_type == "all":
+        return None, None
+    elif period_type == "last_month":
+        start = now - timedelta(days=30)
+        return start, now
+    elif period_type == "last_3_months":
+        start = now - timedelta(days=90)
+        return start, now
+    elif period_type == "last_6_months":
+        start = now - timedelta(days=180)
+        return start, now
+    elif period_type == "custom":
+        if not start_date or not end_date:
+            print("Erro: Período 'custom' requer start_date e end_date")
+            sys.exit(1)
+        
+        if not validate_date_format(start_date) or not validate_date_format(end_date):
+            print("Erro: Datas devem estar no formato YYYY-MM-DD")
+            sys.exit(1)
+        
+        start = datetime.strptime(start_date, '%Y-%m-%d').replace(tzinfo=timezone.utc)
+        end = datetime.strptime(end_date, '%Y-%m-%d').replace(tzinfo=timezone.utc)
+        
+        if start >= end:
+            print("Erro: start_date deve ser anterior a end_date")
+            sys.exit(1)
+        
+        return start, end
+    else:
+        print(f"Erro: Tipo de período inválido: {period_type}")
+        sys.exit(1)
+
+
+def format_period_display(period_type: str, start_date: Optional[datetime], 
+                         end_date: Optional[datetime]) -> str:
+    """
+    Formata o período para exibição.
+    
+    Args:
+        period_type: Tipo de período
+        start_date: Data de início
+        end_date: Data de fim
+        
+    Returns:
+        String formatada para exibição
+    """
+    if period_type == "all":
+        return "Todo o histórico disponível"
+    elif start_date and end_date:
+        start_str = start_date.strftime('%Y-%m-%d')
+        end_str = end_date.strftime('%Y-%m-%d')
+        
+        period_names = {
+            "last_month": "Último mês",
+            "last_3_months": "Últimos 3 meses",
+            "last_6_months": "Últimos 6 meses",
+            "custom": "Período personalizado"
+        }
+        
+        period_name = period_names.get(period_type, "Período")
+        return f"{period_name} ({start_str} a {end_str})"
+    
+    return "Período não especificado"
+
+
+def display_configuration(repositories: List[str], author: str, 
+                         period_type: str, start_date: Optional[datetime], 
+                         end_date: Optional[datetime]):
+    """
+    Exibe a configuração de análise no início da execução.
+    
+    Args:
+        repositories: Lista de repositórios
+        author: Autor dos PRs
+        period_type: Tipo de período
+        start_date: Data de início
+        end_date: Data de fim
+    """
+    print("\n📊 Configuração de Análise de Métricas")
+    print("=" * 50)
+    print("Repositórios:")
+    for repo in repositories:
+        print(f"  - {repo}")
+    print(f"\nAutor: {author}")
+    print(f"Período: {format_period_display(period_type, start_date, end_date)}")
+    print("=" * 50)
+
+
+def parse_arguments() -> argparse.Namespace:
+    """
+    Processa argumentos de linha de comando.
+    
+    Returns:
+        Namespace com os argumentos processados
+    """
+    parser = argparse.ArgumentParser(
+        description='Gera métricas de desenvolvimento do GitHub',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Exemplos de uso:
+  %(prog)s                                    # Usa config.yaml
+  %(prog)s --period last_month                # Sobrescreve período
+  %(prog)s --period custom --start 2025-12-01 --end 2025-12-31
+  %(prog)s --repos MellloJ/Inclusiv          # Apenas um repo
+  %(prog)s --repos "MellloJ/Inclusiv" "Coutinhopmw/awtkd_django"
+  %(prog)s --author outro-usuario            # Outro autor
+        """
+    )
+    
+    parser.add_argument(
+        '--config',
+        default='config.yaml',
+        help='Caminho para arquivo de configuração (padrão: config.yaml)'
+    )
+    
+    parser.add_argument(
+        '--repos',
+        nargs='+',
+        help='Lista de repositórios no formato owner/repo'
+    )
+    
+    parser.add_argument(
+        '--author',
+        help='Autor dos PRs a analisar'
+    )
+    
+    parser.add_argument(
+        '--period',
+        choices=['all', 'last_month', 'last_3_months', 'last_6_months', 'custom'],
+        help='Tipo de período de análise'
+    )
+    
+    parser.add_argument(
+        '--start',
+        help='Data inicial no formato YYYY-MM-DD (para período custom)'
+    )
+    
+    parser.add_argument(
+        '--end',
+        help='Data final no formato YYYY-MM-DD (para período custom)'
+    )
+    
+    return parser.parse_args()
+
+
 def main():
     """Função principal para executar a análise de métricas."""
+    # Processar argumentos de linha de comando
+    args = parse_arguments()
+    
+    # Carregar configuração do arquivo YAML
+    config = load_config(args.config)
+    
     # Obter token de ambiente
     token = os.getenv('GITHUB_TOKEN') or os.getenv('METRICS_TOKEN')
     if not token:
@@ -365,18 +596,49 @@ def main():
         print("Configure a variável de ambiente GITHUB_TOKEN ou METRICS_TOKEN")
         sys.exit(1)
     
-    # Autor para filtrar PRs
-    author = 'jessilver'
+    # Aplicar prioridade de configuração: CLI > config.yaml > padrão
+    # Repositórios
+    if args.repos:
+        repositories = args.repos
+    elif config.get('repositories'):
+        repositories = config['repositories']
+    else:
+        repositories = ['MellloJ/Inclusiv', 'Coutinhopmw/awtkd_django']
     
-    # Repositórios para analisar
-    repositories = [
-        'MellloJ/Inclusiv',
-        'Coutinhopmw/awtkd_django'
-    ]
+    # Validar formato dos repositórios
+    for repo in repositories:
+        if not validate_repo_format(repo):
+            print(f"Erro: Repositório '{repo}' não está no formato correto (owner/repo)")
+            sys.exit(1)
     
-    print("=" * 50)
-    print("Métricas de desenvolvimento")
-    print("=" * 50)
+    # Autor
+    if args.author:
+        author = args.author
+    elif config.get('author'):
+        author = config['author']
+    else:
+        author = 'jessilver'
+    
+    # Período
+    if args.period:
+        period_type = args.period
+        start_date_str = args.start
+        end_date_str = args.end
+    elif config.get('period'):
+        period_config = config['period']
+        period_type = period_config.get('type', 'all')
+        start_date_str = period_config.get('start_date')
+        end_date_str = period_config.get('end_date')
+    else:
+        period_type = 'all'
+        start_date_str = None
+        end_date_str = None
+    
+    # Calcular datas do período
+    start_date, end_date = calculate_period_dates(period_type, start_date_str, end_date_str)
+    
+    # Exibir configuração
+    display_configuration(repositories, author, period_type, start_date, end_date)
     
     # Criar calculador de métricas
     calculator = MetricsCalculator(token, author)
@@ -385,7 +647,7 @@ def main():
     all_metrics = []
     for repo_name in repositories:
         try:
-            metrics = calculator.analyze_repository(repo_name)
+            metrics = calculator.analyze_repository(repo_name, start_date, end_date)
             if metrics:
                 calculator.print_metrics(metrics)
                 all_metrics.append(metrics)
