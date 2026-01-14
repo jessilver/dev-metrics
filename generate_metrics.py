@@ -389,7 +389,7 @@ def main():
             if metrics:
                 calculator.print_metrics(metrics)
                 all_metrics.append(metrics)
-        except Exception as e:
+        except (GithubException, KeyError, ValueError) as e:
             print(f"Erro ao processar {repo_name}: {e}")
             continue
     
