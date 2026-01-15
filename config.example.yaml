@@ -1,0 +1,28 @@
+# Configuração de Métricas de Desenvolvimento
+# Este é um arquivo de exemplo. Copie para config.yaml e ajuste conforme necessário.
+
+# Repositórios a serem analisados
+# Formato: owner/repo (ex: microsoft/vscode)
+repositories:
+  - MellloJ/Inclusiv
+  - Coutinhopmw/awtkd_django
+  # Adicione mais repositórios aqui no formato: owner/repo
+
+# Autor dos PRs a serem analisados
+# Nome de usuário do GitHub
+author: jessilver
+
+# Período de análise
+period:
+  # Opções disponíveis:
+  # - "all": Analisa todo o histórico disponível
+  # - "last_month": Analisa apenas o último mês
+  # - "last_3_months": Analisa os últimos 3 meses
+  # - "last_6_months": Analisa os últimos 6 meses
+  # - "custom": Período personalizado (requer start_date e end_date)
+  type: "all"
+  
+  # Datas personalizadas (apenas usadas quando type = "custom")
+  # Formato: YYYY-MM-DD (ex: 2025-01-01)
+  start_date: ""  # Data inicial (ex: 2025-01-01)
+  end_date: ""    # Data final (ex: 2025-12-31)

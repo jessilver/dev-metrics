@@ -1,0 +1,18 @@
+# Configuração de Métricas de Desenvolvimento
+
+# Repositórios a serem analisados
+repositories:
+  - MellloJ/Inclusiv
+  - Coutinhopmw/awtkd_django
+  # Adicione mais repositórios aqui no formato: owner/repo
+
+# Autor dos PRs a serem analisados
+author: jessilver
+
+# Período de análise
+period:
+  type: "all"  # Opções: "all", "last_month", "last_3_months", "last_6_months", "custom"
+  
+  # Apenas usado quando type = "custom"
+  start_date: ""  # Formato: YYYY-MM-DD (ex: 2025-01-01)
+  end_date: ""    # Formato: YYYY-MM-DD (ex: 2025-12-31)
